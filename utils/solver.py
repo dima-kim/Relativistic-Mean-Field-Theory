@@ -109,7 +109,7 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin):
         # Set the next energy guess to be the solution we found.
         # Also shift it backwards by 1.5 MeV so that we dont miss solutions
         # that have energies close to one another.
-        energy_guess = energy - 1.5
+        energy_guess = energy - 3
 
     return np.array(energy_sol), np.array(wavefunction_sol)
     

@@ -139,13 +139,14 @@ class energy_optimizer:
           The w wavefunction in units of [fm^-1/2].
     
         '''
-        
+        tol = 0.005
+
         E = E_guess
         deltaE = -1
 
         # The energy increment must be modified depending on your problem.
         # For coulomb potential 0.01 works well.
-        energy_increment = 1.5
+        energy_increment = 1
 
         # We want deltaE to be moving towards the solution. Essentially we want to 
         # sweep the energies from the bottom to get all of the energy eigenvalues.
@@ -157,7 +158,7 @@ class energy_optimizer:
         for i in range(50):
             deltaE_variables, r_array, u_array, v_array = self.RK4_dirac_energy_guess(E,diff_eq_class)
             deltaE = deltaE_variables[1] * deltaE_variables[0] * self.hbarc 
-            E = E + deltaE 
+            E = E + deltaE / 2
 
             if np.abs(deltaE) < tol:
                 break
@@ -166,7 +167,7 @@ class energy_optimizer:
             print('Did not converge with 50 iterations')
             return 1
         else:
-            print('Succesfully converged with ' + str(i) + ' iterations')
+            print('Succesfully converged with ' + str(i) + ' iterations, energy is : ' + str(E))
             return E, r_array, u_array, v_array
         
         
