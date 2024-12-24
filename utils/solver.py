@@ -47,7 +47,7 @@ def coulomb_dirac_energy_solver(input_file):
 
     return energy_sol, wavefunction_sol
 
-def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin):
+def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,isospin):
     '''
     Solve for the energy eigenvalues and wavefunctions for a specific
     nucleus, whose information is given in the input file.
@@ -82,7 +82,7 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin):
     # we are working with, this will simply just pick out different
     # potentials parameters and potential constructions in this function
     # no need to modify any other existing functions to include isospin.
-    if isospin == 1:
+    if isospin == 1/2:
         kappa_list = input_file['Sheet3']['KAPPA']
         angular_mom_list = input_file['Sheet3']['2J+1']
         r_middle_list = input_file['Sheet3']['MATCH RADIUS [FM]']
@@ -96,8 +96,11 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin):
     energy_sol = []
     wavefunction_sol = []
     for index,kappa in enumerate(kappa_list):
+        
+        # Including the factor of the isospin the the rho potential present in the Dirac equation.
+        rho_pot_isospin = lambda r: isospin * rho_pot(r)
 
-        diff_eq = RMF_differential_equation(nucleon_mass,kappa,scalar_pot,vector_pot)
+        diff_eq = RMF_differential_equation(nucleon_mass,kappa,scalar_pot,vector_pot,rho_pot_isospin)
         U = diff_eq.U_RMF()
         V = diff_eq.V_RMF()
         energy_opt = energy_optimizer(r_min,r_middle_list[index],r_max,N_steps,U,V)
@@ -107,7 +110,7 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin):
         wavefunction_sol.append([r_array,u_array,v_array])
 
         # Set the next energy guess to be the solution we found.
-        # Also shift it backwards by 1.5 MeV so that we dont miss solutions
+        # Also shift it backwards by 3 MeV so that we dont miss solutions
         # that have energies close to one another.
         energy_guess = energy - 3
 
@@ -150,11 +153,13 @@ def generate_densities(energy_sol, wavefunction_sol):
 
     rho_b_array = 0
     rho_s_array = 0
+    rho_3_array = 0
     for i in range(dim):
         rho_b_array = rho_b_array + (energy_sol[i][1] / (4 * np.pi * wfk_squared[i][0])) * (wfk_squared[i][1] + wfk_squared[i][2])
         rho_s_array = rho_s_array + (energy_sol[i][1] / (4 * np.pi * wfk_squared[i][0])) * (wfk_squared[i][1] - wfk_squared[i][2])
+        rho_3_array = rho_3_array + 0.5 * (energy_sol[i][1] / (4 * np.pi * wfk_squared[i][0])) * (wfk_squared[i][1] + wfk_squared[i][2]) * (-1)**(energy_sol[i][2] - 0.5)
 
-    return rho_b_array, rho_s_array
+    return rho_b_array, rho_s_array, rho_3_array
 
 def generate_I1(r_array,rho_array,m_meson):
     '''
@@ -180,7 +185,7 @@ def generate_I1(r_array,rho_array,m_meson):
     
     '''
 
-    hbarc = 197.326
+    hbarc = 197.33
     I1_array = []
     for index in range(len(r_array)):
         
@@ -216,7 +221,7 @@ def generate_I2(r_array,rho_array,m_meson):
     
     '''
 
-    hbarc = 197.326
+    hbarc = 197.33
     I2_array = []
     array_dim = len(r_array)
     for index in range(array_dim):
@@ -256,14 +261,19 @@ def generate_potential(r_array,rho_array,m_meson,meson_coupling):
 
     '''
 
-    hbarc = 197.326
+    hbarc = 197.33
     I1 = generate_I1(r_array,rho_array,m_meson)
     I2 = generate_I2(r_array,rho_array,m_meson)
 
     # Remember that are including the factor of the coupling into our definition of the potential.
     pot_array = hbarc**2 * (meson_coupling**2 / (2 * m_meson * r_array)) * ( np.exp(-m_meson * r_array / hbarc) * (I1 - I2[0]) + np.exp(m_meson * r_array / hbarc) * I2)
 
-    pot_interp = interpolate.interp1d(r_array, pot_array)
+    # The reason I use this interpolatior instead of cubic is because in flat regions the 
+    # cubic spline can be oscilating. PChipInterpolator tries to keep the shape
+    # implied by the data. The only offset is that cubic spline is twice differentiable
+    # while PChipInterpolator is once differentiable. This is ok because we only need to differentiate
+    # our potentials once!
+    pot_interp = interpolate.PchipInterpolator(r_array, pot_array)
 
     return pot_interp
                      
@@ -288,59 +298,71 @@ def solve_SCRMFT(input_file, tol = 1E-6):
       in units of [fm^-1/2].
       
     '''
+
+    # As used in original study by Horowitz and Serot
+    tol = 0.05
     
     # Meson Parameters
     m_scalar = input_file['Sheet1']['SIGMA MASS [MEV]'][0]
     m_vector = input_file['Sheet1']['OMEGA MASS [MEV]'][0]
+    m_rho = input_file['Sheet1']['RHO MASS [MEV]'][0]
     gs = input_file['Sheet2']['SCALAR COUPLING'][0]
     gv = input_file['Sheet2']['VECTOR COUPLING'][0]
+    grho = input_file['Sheet2']['RHO COUPLING'][0]
 
     # First iteration involves the Woods-Saxon potential
     scalar_pot_strength = input_file['Sheet2']['SCALAR STRENGTH [MEV]'][0]
     vector_pot_strength = input_file['Sheet2']['VECTOR STRENGTH [MEV]'][0]
+    rho_pot_strength = input_file['Sheet2']['RHO STRENGTH [MEV]'][0]
     R0 = input_file['Sheet2']['R0 [FM]'][0]
     diffuseness = input_file['Sheet2']['DIFFUSENESS [FM]'][0]
 
     scalar_pot = woods_saxon_pot(scalar_pot_strength,R0,diffuseness)
     vector_pot = woods_saxon_pot(vector_pot_strength,R0,diffuseness)
+    rho_pot = woods_saxon_pot(rho_pot_strength,R0,diffuseness)
 
     # Initialize the difference to ensure while loop is true in first iteration
     scalar_pot_diff = 100
     vector_pot_diff = 100
+    rho_pot_diff = 100
     iteration = 0
 
-    while scalar_pot_diff > tol or vector_pot_diff > tol:
+    while scalar_pot_diff > tol or vector_pot_diff > tol or rho_pot_diff > tol:
 
         # Currently our potentials don't distinguish between proton and neutron
-        p_energy_sol, p_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,isospin=1)
-        n_energy_sol, n_wavefunction_sol = p_energy_sol, p_wavefunction_sol
+        p_energy_sol, p_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,isospin=1/2)
+        n_energy_sol, n_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,isospin=-1/2)
 
         total_energy_sol = np.concatenate([p_energy_sol,n_energy_sol])
         total_wavefunction_sol = np.concatenate([p_wavefunction_sol,n_wavefunction_sol])
 
         r_array = total_wavefunction_sol[0][0]
 
-        rho_b, rho_s = generate_densities(total_energy_sol,total_wavefunction_sol)
+        rho_b, rho_s, rho_3 = generate_densities(total_energy_sol,total_wavefunction_sol)
 
         # Previous potential values
         scalar_pot_before = scalar_pot(r_array)
         vector_pot_before = vector_pot(r_array)
+        rho_pot_before = rho_pot(r_array)
 
         scalar_pot = generate_potential(r_array, rho_s, m_scalar, gs)
         vector_pot = generate_potential(r_array, rho_b, m_vector, gv)
+        rho_pot = generate_potential(r_array, rho_3, m_rho, grho)
 
         # New potential values
         scalar_pot_after = scalar_pot(r_array)
         vector_pot_after = vector_pot(r_array)
+        rho_pot_after = rho_pot(r_array)
 
         scalar_pot_diff = np.abs(np.max(scalar_pot_before - scalar_pot_after))
         vector_pot_diff = np.abs(np.max(vector_pot_before - vector_pot_after))
+        rho_pot_diff = np.abs(np.max(rho_pot_before - rho_pot_after))
 
         iteration = iteration + 1
 
     print('Self Consistency Acheived in ' + str(iteration) + ' iterations')
 
-    return total_energy_sol, total_wavefunction_sol
+    return total_energy_sol, total_wavefunction_sol, scalar_pot, vector_pot, rho_pot
 
 
     

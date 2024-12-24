@@ -39,7 +39,8 @@ class runge_kutta:
         self.r_middle = r_middle
         self.r_max = r_max
         self.N_steps = N_steps
-        self.hbarc = 197.326
+        # self.hbarc = 197.326
+        self.hbarc = 197.33
 
     def forward_RK4(self, u_initial, v_initial, U, V, E_guess):
         '''

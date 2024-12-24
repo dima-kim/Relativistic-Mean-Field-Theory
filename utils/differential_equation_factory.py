@@ -31,7 +31,8 @@ class coulomb_differential_equation:
     
     def __init__(self,m,xi,kappa):
         self.m = m
-        self.hbarc = 197.326
+        self.hbarc = 197.33
+        # self.hbarc = 197.326
         self.xi = xi
         self.kappa = kappa
 
@@ -115,11 +116,12 @@ class RMF_differential_equation:
 
     '''
     
-    def __init__(self,m,kappa,scalar_pot,vector_pot):
+    def __init__(self,m,kappa,scalar_pot,vector_pot,rho_pot):
         self.m = m
         self.kappa = kappa
         self.scalar_pot = scalar_pot
         self.vector_pot = vector_pot
+        self.rho_pot = rho_pot
         self.hbarc = 197.326
 
     def U_RMF(self):
@@ -133,7 +135,7 @@ class RMF_differential_equation:
          
         '''
 
-        U = lambda r, u, v, E: - (self.kappa / r) * self.hbarc * u + (E + self.m - self.scalar_pot(r) - self.vector_pot(r)) * v
+        U = lambda r, u, v, E: - (self.kappa / r) * self.hbarc * u + (E + self.m - self.scalar_pot(r) - self.vector_pot(r) - self.rho_pot(r)) * v
 
         return U
 
@@ -148,7 +150,7 @@ class RMF_differential_equation:
          
         '''
 
-        V = lambda r, u, v, E: ((self.kappa / r) * self.hbarc * v - (E - self.m + self.scalar_pot(r) - self.vector_pot(r)) * u)
+        V = lambda r, u, v, E: ((self.kappa / r) * self.hbarc * v - (E - self.m + self.scalar_pot(r) - self.vector_pot(r) - self.rho_pot(r)) * u)
 
         return V
     
@@ -177,9 +179,9 @@ class RMF_differential_equation:
         if limit == 'zero':
             if self.kappa < 0:
                 u_IC = lambda r, E: r**(-self.kappa)
-                v_IC = lambda r, E : -(E - self.m + self.scalar_pot(r) - self.vector_pot(r)) * r**(-self.kappa + 1) / (1 - 2 * self.kappa) / self.hbarc
+                v_IC = lambda r, E : -(E - self.m + self.scalar_pot(r) - self.vector_pot(r) - self.rho_pot(r)) * r**(-self.kappa + 1) / (1 - 2 * self.kappa) / self.hbarc
             if self.kappa > 0:
-                u_IC = lambda r, E: (E + self.m - self.scalar_pot(r) - self.vector_pot(r)) * r**(self.kappa + 1) / (1 + 2 * self.kappa) / self.hbarc
+                u_IC = lambda r, E: (E + self.m - self.scalar_pot(r) - self.vector_pot(r) - self.rho_pot(r)) * r**(self.kappa + 1) / (1 + 2 * self.kappa) / self.hbarc
                 v_IC = lambda r, E : r**(self.kappa)
         else:
             u_IC = lambda r, E: np.exp( -np.sqrt(self.m**2 - E**2) * r / self.hbarc) 

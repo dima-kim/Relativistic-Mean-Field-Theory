@@ -39,7 +39,8 @@ class energy_optimizer:
         self.N_steps = N_steps
         self.U = U
         self.V = V    
-        self.hbarc = 197.326
+        # self.hbarc = 197.326
+        self.hbarc = 197.33
 
     def RK4_dirac_energy_guess(self, E_guess, diff_eq_class):
         '''
@@ -106,7 +107,7 @@ class energy_optimizer:
 
         return [u_difference, v_array_R[0]], r_array, u_array, v_array
     
-    def find_energy_eigenvalue(self, E_guess, diff_eq_class, tol = 5E-6):
+    def find_energy_eigenvalue(self, E_guess, diff_eq_class, tol = 1E-6):
         '''
         Determine the energy eigenvalue using an iterative method that
         can be derived using the differential equation. Can be found on page 41 in:
@@ -139,6 +140,8 @@ class energy_optimizer:
           The w wavefunction in units of [fm^-1/2].
     
         '''
+
+        # As used in original study by Horowitz and Serot
         tol = 0.005
 
         E = E_guess
