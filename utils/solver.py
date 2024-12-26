@@ -103,11 +103,13 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot
         angular_mom_list = input_file['Sheet3']['2J+1']
         r_middle_list = input_file['Sheet3']['MATCH RADIUS [FM]']
         energy_guess = input_file['Sheet3']['ENERGY GUESS [MEV]'][0]
+        state_list = input_file['Sheet3']['LABEL']
     else:
         kappa_list = input_file['Sheet4']['KAPPA']
         angular_mom_list = input_file['Sheet4']['2J+1']
         r_middle_list = input_file['Sheet4']['MATCH RADIUS [FM]']
         energy_guess = input_file['Sheet4']['ENERGY GUESS [MEV]'][0]
+        state_list = input_file['Sheet4']['LABEL']
 
     energy_sol = []
     wavefunction_sol = []
@@ -122,14 +124,15 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot
         V = diff_eq.V_RMF()
         energy_opt = energy_optimizer(r_min,r_middle_list[index],r_max,N_steps,U,V)
 
+        print(state_list[index])
         energy, r_array, u_array, v_array = energy_opt.find_energy_eigenvalue(energy_guess,diff_eq)
         energy_sol.append([energy,angular_mom_list[index],isospin])
         wavefunction_sol.append([r_array,u_array,v_array])
 
         # Set the next energy guess to be the solution we found.
-        # Also shift it backwards by 3 MeV so that we dont miss solutions
+        # Also shift it backwards by 5 MeV so that we dont miss solutions
         # that have energies close to one another.
-        energy_guess = energy - 3
+        energy_guess = energy - 6
 
     return np.array(energy_sol), np.array(wavefunction_sol)
     
@@ -457,9 +460,20 @@ def solve_SCRMFT(input_file, tol = 1E-6):
     iteration = 0
 
     while scalar_pot_diff > tol or vector_pot_diff > tol or rho_pot_diff > tol or coulomb_pot_diff > tol:
-
-        p_energy_sol, p_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot,isospin=1/2)
+        print('')
+        print('------------ ITERATION ' + str(iteration) + ' ------------')
+        
+        print('')
+        print('--------------')
+        print('NEUTRON STATES')
+        print('--------------')
         n_energy_sol, n_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot,isospin=-1/2)
+        
+        print('')
+        print('-------------')
+        print('PROTON STATES')
+        print('-------------')
+        p_energy_sol, p_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot,isospin=1/2)
 
         total_energy_sol = np.concatenate([p_energy_sol,n_energy_sol])
         total_wavefunction_sol = np.concatenate([p_wavefunction_sol,n_wavefunction_sol])
@@ -478,6 +492,7 @@ def solve_SCRMFT(input_file, tol = 1E-6):
         vector_pot = generate_meson_potential(r_array, rho_b, m_vector, gv)
         rho_pot = generate_meson_potential(r_array, rho_3, m_rho, grho)
         coulomb_pot = generate_coulomb_potential(r_array, rho_p, e)
+        # coulomb_pot = lambda r: 0
 
         # New potential values
         scalar_pot_after = scalar_pot(r_array)
@@ -496,7 +511,60 @@ def solve_SCRMFT(input_file, tol = 1E-6):
 
     return total_energy_sol, total_wavefunction_sol, scalar_pot, vector_pot, rho_pot, coulomb_pot
 
+def solve_woods_saxon_RMFT(input_file):
+    '''
+    Solves the woods-saxon relativistic mean field theory.
 
+    Parameters
+    ----------
+    input_file : string
+      The address of the excel file that contains all the relevant 
+      parameters for the nucleus we want to calculate the single
+      particle wavefunctions for.
+
+    tol : double
+      The tolerance for self-consistency condition.
+
+    Returns
+    -------
+    total_energy_sol : 2-D ndarray
+      The single particle energies of the proton and neutron in units of [MeV].
+    
+    total_wavefunction_sol : 2-D ndarray
+      The single particle wavefunction solutions of the proton and neutron,
+      in units of [fm^-1/2].
+      
+    '''
+
+    # First iteration involves the Woods-Saxon potential
+    scalar_pot_strength = input_file['Sheet2']['SCALAR STRENGTH [MEV]'][0]
+    vector_pot_strength = input_file['Sheet2']['VECTOR STRENGTH [MEV]'][0]
+    rho_pot_strength = input_file['Sheet2']['RHO STRENGTH [MEV]'][0]
+    coulomb_pot_strength = input_file['Sheet2']['COULOMB STRENGTH [MEV]'][0]
+    R0 = input_file['Sheet2']['R0 [FM]'][0]
+    diffuseness = input_file['Sheet2']['DIFFUSENESS [FM]'][0]
+
+    scalar_pot = woods_saxon_pot(scalar_pot_strength,R0,diffuseness)
+    vector_pot = woods_saxon_pot(vector_pot_strength,R0,diffuseness)
+    rho_pot = woods_saxon_pot(rho_pot_strength,R0,diffuseness)
+    coulomb_pot = woods_saxon_pot(coulomb_pot_strength,R0,diffuseness)
+        
+    print('')
+    print('--------------')
+    print('NEUTRON STATES')
+    print('--------------')
+    n_energy_sol, n_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot,isospin=-1/2)
+        
+    print('')
+    print('-------------')
+    print('PROTON STATES')
+    print('-------------')
+    p_energy_sol, p_wavefunction_sol = RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot,isospin=1/2)
+
+    total_energy_sol = np.concatenate([p_energy_sol,n_energy_sol])
+    total_wavefunction_sol = np.concatenate([p_wavefunction_sol,n_wavefunction_sol])
+
+    return total_energy_sol, total_wavefunction_sol, scalar_pot, vector_pot, rho_pot, coulomb_pot
     
 
     

@@ -99,8 +99,11 @@ class energy_optimizer:
 
         u_difference = u_array_R[0] - u_array_L[self.N_steps-1]
 
-        # Concatenate the left and the right solutions and remove one of the
-        # r_middle points, otherwise our function is doubly valued at r_middle.
+        # Concatenate the left and the right solutions take the value at
+        # r_middle to be the average of the left and right RK4 solutions
+        u_array_R[0] = 0.5 * (u_array_L[self.N_steps-1] + u_array_R[0])
+        v_array_R[0] = 0.5 * (v_array_L[self.N_steps-1] + v_array_R[0])
+
         r_array = np.concatenate((r_array_L[0:self.N_steps-1],r_array_R))
         u_array = np.concatenate((u_array_L[0:self.N_steps-1],u_array_R))
         v_array = np.concatenate((v_array_L[0:self.N_steps-1],v_array_R))
@@ -149,7 +152,7 @@ class energy_optimizer:
 
         # The energy increment must be modified depending on your problem.
         # For coulomb potential 0.01 works well.
-        energy_increment = 1
+        energy_increment = 0.05
 
         # We want deltaE to be moving towards the solution. Essentially we want to 
         # sweep the energies from the bottom to get all of the energy eigenvalues.
@@ -171,6 +174,7 @@ class energy_optimizer:
             return 1
         else:
             print('Succesfully converged with ' + str(i) + ' iterations, energy is : ' + str(E))
+            print('The discontinuity in the u-wavefunction is: ' + str(deltaE_variables[0]))
             return E, r_array, u_array, v_array
         
         
