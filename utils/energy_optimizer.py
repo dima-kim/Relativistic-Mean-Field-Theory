@@ -158,21 +158,21 @@ class energy_optimizer:
             deltaE_variables, r_array, u_array, v_array = self.RK4_dirac_energy_guess(E,diff_eq_class)
             deltaE = deltaE_variables[1] * deltaE_variables[0] * self.hbarc 
         
-        for i in range(50):
+        for iterations in range(50):
             deltaE_variables, r_array, u_array, v_array = self.RK4_dirac_energy_guess(E,diff_eq_class)
             deltaE = deltaE_variables[1] * deltaE_variables[0] * self.hbarc 
-            E = E + deltaE 
+            E = E + deltaE
 
             if np.abs(deltaE) < tol:
                 break
         
-        if i == 49:
-            print('Did not converge in 50 iterations')
+        if iterations == 49:
+            print('Did not converge in 49 iterations')
             return 1
         else:
-            print('Succesfully converged in ' + str(i) + ' iterations, energy is : ' + str(E))
+            print('Succesfully converged in ' + str(iterations) + ' iterations, energy is : ' + str(E))
             print('The discontinuity in the u-wavefunction is: ' + str(deltaE_variables[0]))
-            return E, r_array, u_array, v_array, i
+            return E, r_array, u_array, v_array, iterations
         
         
 

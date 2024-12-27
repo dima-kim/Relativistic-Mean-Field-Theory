@@ -94,10 +94,6 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot
     r_max = input_file['Sheet1']['R_MAX [FM]'][0]
     N_steps = input_file['Sheet1']['N_STEPS'][0]
     
-    # In a more detailed study, isospin will also change the potentials 
-    # we are working with, this will simply just pick out different
-    # potentials parameters and potential constructions in this function
-    # no need to modify any other existing functions to include isospin.
     if isospin == 1/2:
         kappa_list = input_file['Sheet3']['KAPPA']
         angular_mom_list = input_file['Sheet3']['2J+1']
@@ -128,7 +124,7 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot
         print(state_list[index])
         energy, r_array, u_array, v_array, iterations = energy_opt.find_energy_eigenvalue(energy_guess,diff_eq)
 
-        # I believe that I am going back enough to capture the lowest energy and my energy resolutions is fine enough.
+        # I believe that I am going back enough to capture the lowest energy and my energy resolution is fine enough.
         # Furthermore, I have set the match radii so that they are away from nodes. If the iteration is 0
         # it must be that the energy guess makes one of the wavefunctions 0 over a range of r-values. Thus we will continue to
         # offset the energy guess until we get a result.
@@ -275,7 +271,8 @@ def generate_I2_meson(r_array,rho_array,m_meson):
 
 def generate_meson_potential(r_array,rho_array,m_meson,meson_coupling):
     '''
-    Solves the meson field differential equations by Green's function method. More information in
+    Solves the meson field differential equations by Green's function method and creates the meson potential
+    by multiplying the meson field by the coupling. More information in:
     
      Computational Nuclear Physics 1: Nuclear Structure by K. Langanke J. A. Maruhn S. E. Koonin   
 
@@ -304,7 +301,8 @@ def generate_meson_potential(r_array,rho_array,m_meson,meson_coupling):
     I1 = generate_I1_meson(r_array,rho_array,m_meson)
     I2 = generate_I2_meson(r_array,rho_array,m_meson)
 
-    # Remember that are including the factor of the coupling into our definition of the potential.
+    # Remember that we are generating the meson POTENTIAL, thus we multiply
+    # the meson field by an extra factor of the couping.
     pot_array = hbarc**2 * (meson_coupling**2 / (2 * m_meson * r_array)) * ( np.exp(-m_meson * r_array / hbarc) * (I1 - I2[0]) + np.exp(m_meson * r_array / hbarc) * I2)
 
     # The reason I use this interpolatior instead of cubic is because in flat regions the 
@@ -377,7 +375,8 @@ def generate_I2_coulomb(r_array,rho_array):
 
 def generate_coulomb_potential(r_array,rho_array,electron_coupling):
     '''
-    Solves the coulomb differential equations by Green's function method.
+    Solves for the coulomb field by Green's function method, and creates the coulomb
+    potential by multiplying it by the coupling constant. 
 
     Paramters
     ---------
@@ -401,7 +400,8 @@ def generate_coulomb_potential(r_array,rho_array,electron_coupling):
     I1 = generate_I1_coulomb(r_array,rho_array)
     I2 = generate_I2_coulomb(r_array,rho_array)
 
-    # Remember that are including the factor of the coupling into our definition of the potential.
+    # Remember we are generating the coulomb POTENTIAL, thus we multiply the coulomb field
+    # by an extra factor of the coupling.
     pot_array = hbarc * electron_coupling**2 * ( (I1 / r_array) + I2)
 
     # The reason I use this interpolatior instead of cubic is because in flat regions the 
@@ -463,13 +463,13 @@ def solve_SCRMFT(input_file, tol = 5E-3):
     coulomb_pot = woods_saxon_pot(coulomb_pot_strength,R0,diffuseness)
 
     # Initialize the difference to ensure while loop is true in first iteration
-    scalar_pot_diff = 10
-    vector_pot_diff = 10
-    rho_pot_diff = 10
-    coulomb_pot_diff = 10
+    scalar_field_diff = 10
+    vector_field_diff = 10
+    rho_field_diff = 10
+    coulomb_field_diff = 10
     iteration = 0
 
-    while scalar_pot_diff > tol or vector_pot_diff > tol or rho_pot_diff > tol or coulomb_pot_diff > tol:
+    while scalar_field_diff > tol or vector_field_diff > tol or rho_field_diff > tol or coulomb_field_diff > tol:
         print('')
         print('------------ ITERATION ' + str(iteration) + ' ------------')
         
@@ -508,18 +508,23 @@ def solve_SCRMFT(input_file, tol = 5E-3):
         rho_pot_after = rho_pot(r_array)
         coulomb_pot_after = coulomb_pot(r_array)
 
-        # There is an extra factor of the coupling in the potentials, we have to remove it by
-        # dividing it out
-        scalar_pot_diff = np.abs( np.max( (scalar_pot_before - scalar_pot_after)/gs ) )
-        vector_pot_diff = np.abs( np.max( (vector_pot_before - vector_pot_after)/gv ) )
-        rho_pot_diff = np.abs( np.max( (rho_pot_before - rho_pot_after)/grho ) )
-        coulomb_pot_diff = np.abs( np.max( (coulomb_pot_before - coulomb_pot_after)/e ) )
+        # To get the fields we divide out the coupling from the potentials
+        scalar_field_diff = np.abs( np.max( (scalar_pot_before - scalar_pot_after)/gs ) )
+        vector_field_diff = np.abs( np.max( (vector_pot_before - vector_pot_after)/gv ) )
+        rho_field_diff = np.abs( np.max( (rho_pot_before - rho_pot_after)/grho ) )
+        coulomb_field_diff = np.abs( np.max( (coulomb_pot_before - coulomb_pot_after)/e ) )
 
         iteration = iteration + 1
 
-    print('Self Consistency Acheived in ' + str(iteration) + ' iterations')
+    print('')
+    print('Self Consistency Acheived in ' + str(iteration-1) + ' Iterations')
 
-    return total_energy_sol, total_wavefunction_sol, scalar_pot, vector_pot, rho_pot, coulomb_pot
+    scalar_field = lambda r: scalar_pot(r) / gs
+    vector_field = lambda r: vector_pot(r) / gv
+    rho_field = lambda r: rho_pot(r) / grho
+    coulomb_field = lambda r: coulomb_pot(r) / e
+
+    return total_energy_sol, total_wavefunction_sol, scalar_field, vector_field, rho_field, coulomb_field
 
 def solve_woods_saxon_RMFT(input_file):
     '''
@@ -545,6 +550,13 @@ def solve_woods_saxon_RMFT(input_file):
       in units of [fm^-1/2].
       
     '''
+    # Meson Parameters
+    gs = input_file['Sheet2']['SCALAR COUPLING'][0]
+    gv = input_file['Sheet2']['VECTOR COUPLING'][0]
+    grho = input_file['Sheet2']['RHO COUPLING'][0]
+
+    # Coulomb Parameters
+    e = input_file['Sheet2']['COULOMB COUPLING'][0]
 
     # First iteration involves the Woods-Saxon potential
     scalar_pot_strength = input_file['Sheet2']['SCALAR STRENGTH [MEV]'][0]
@@ -574,7 +586,12 @@ def solve_woods_saxon_RMFT(input_file):
     total_energy_sol = np.concatenate([p_energy_sol,n_energy_sol])
     total_wavefunction_sol = np.concatenate([p_wavefunction_sol,n_wavefunction_sol])
 
-    return total_energy_sol, total_wavefunction_sol, scalar_pot, vector_pot, rho_pot, coulomb_pot
+    scalar_field = lambda r: scalar_pot(r) / gs
+    vector_field = lambda r: vector_pot(r) / gv
+    rho_field = lambda r: rho_pot(r) / grho
+    coulomb_field = lambda r: coulomb_pot(r) / e
+
+    return total_energy_sol, total_wavefunction_sol, scalar_field, vector_field, rho_field, coulomb_field
     
 
     
