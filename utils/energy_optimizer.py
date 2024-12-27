@@ -82,7 +82,7 @@ class energy_optimizer:
         r_array_R, u_array_R, v_array_R = RK4_integrator.backward_RK4(u_initial_R(self.r_max,E_guess),v_initial_R(self.r_max,E_guess),self.U,self.V,E_guess)
 
         # Convetionally calculate a scale factor to make v(r) continuous at the boundary
-        scale_factor = v_array_L[self.N_steps-1] / v_array_R[0]
+        scale_factor = v_array_L[-1] / v_array_R[0]
 
         # Rescale the entire right fields
         u_array_R = scale_factor * u_array_R
@@ -97,20 +97,20 @@ class energy_optimizer:
         u_array_R = norm * u_array_R
         v_array_R = norm * v_array_R
 
-        u_difference = u_array_R[0] - u_array_L[self.N_steps-1]
+        u_difference = u_array_R[0] - u_array_L[-1]
 
         # Concatenate the left and the right solutions take the value at
         # r_middle to be the average of the left and right RK4 solutions
-        u_array_R[0] = 0.5 * (u_array_L[self.N_steps-1] + u_array_R[0])
-        v_array_R[0] = 0.5 * (v_array_L[self.N_steps-1] + v_array_R[0])
+        u_array_R[0] = 0.5 * (u_array_L[-1] + u_array_R[0])
+        v_array_R[0] = 0.5 * (v_array_L[-1] + v_array_R[0])
 
-        r_array = np.concatenate((r_array_L[0:self.N_steps-1],r_array_R))
-        u_array = np.concatenate((u_array_L[0:self.N_steps-1],u_array_R))
-        v_array = np.concatenate((v_array_L[0:self.N_steps-1],v_array_R))
+        r_array = np.concatenate((r_array_L[:-1],r_array_R))
+        u_array = np.concatenate((u_array_L[:-1],u_array_R))
+        v_array = np.concatenate((v_array_L[:-1],v_array_R))
 
         return [u_difference, v_array_R[0]], r_array, u_array, v_array
     
-    def find_energy_eigenvalue(self, E_guess, diff_eq_class, tol = 1E-6):
+    def find_energy_eigenvalue(self, E_guess, diff_eq_class, tol = 5E-3):
         '''
         Determine the energy eigenvalue using an iterative method that
         can be derived using the differential equation. Can be found on page 41 in:
@@ -144,15 +144,12 @@ class energy_optimizer:
     
         '''
 
-        # As used in original study by Horowitz and Serot
-        tol = 0.005
-
         E = E_guess
         deltaE = -1
 
         # The energy increment must be modified depending on your problem.
         # For coulomb potential 0.01 works well.
-        energy_increment = 0.05
+        energy_increment = 0.1
 
         # We want deltaE to be moving towards the solution. Essentially we want to 
         # sweep the energies from the bottom to get all of the energy eigenvalues.
@@ -164,18 +161,18 @@ class energy_optimizer:
         for i in range(50):
             deltaE_variables, r_array, u_array, v_array = self.RK4_dirac_energy_guess(E,diff_eq_class)
             deltaE = deltaE_variables[1] * deltaE_variables[0] * self.hbarc 
-            E = E + deltaE / 2
+            E = E + deltaE 
 
             if np.abs(deltaE) < tol:
                 break
         
         if i == 49:
-            print('Did not converge with 50 iterations')
+            print('Did not converge in 50 iterations')
             return 1
         else:
-            print('Succesfully converged with ' + str(i) + ' iterations, energy is : ' + str(E))
+            print('Succesfully converged in ' + str(i) + ' iterations, energy is : ' + str(E))
             print('The discontinuity in the u-wavefunction is: ' + str(deltaE_variables[0]))
-            return E, r_array, u_array, v_array
+            return E, r_array, u_array, v_array, i
         
         
 

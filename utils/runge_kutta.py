@@ -35,12 +35,18 @@ class runge_kutta:
     '''
 
     def __init__(self, r_min, r_middle, r_max, N_steps):
-        self.r_min = r_min
-        self.r_middle = r_middle
-        self.r_max = r_max
-        self.N_steps = N_steps
         # self.hbarc = 197.326
         self.hbarc = 197.33
+
+        # Calculate r_array and the index of the element that is
+        # closest to r_middle.
+        self.r_array = np.linspace(r_min,r_max,N_steps)
+        self.step_size = self.r_array[1] - self.r_array[0]
+        self.index_middle = (np.abs(self.r_array - r_middle)).argmin()
+        
+        # Create the radial arrays used for forward (L) and backward (R) RK4
+        self.r_array_L = self.r_array[0:self.index_middle + 1]
+        self.r_array_R = self.r_array[self.index_middle:N_steps]
 
     def forward_RK4(self, u_initial, v_initial, U, V, E_guess):
         '''
@@ -79,20 +85,21 @@ class runge_kutta:
           In units of [fm^-1/2].
         
         '''
-        
+      
         # Initialize arrays.
-        r_array = np.zeros(self.N_steps)
-        u_array = np.zeros(self.N_steps)
-        v_array = np.zeros(self.N_steps)
+        r_array = self.r_array_L
+
+        array_len = len(r_array)
+        u_array = np.zeros(array_len)
+        v_array = np.zeros(array_len)
 
         # Set initial conditions 
-        r_array[0] = self.r_min
         u_array[0] = u_initial
         v_array[0] = v_initial
 
-        step_size = (self.r_middle - self.r_min) / (self.N_steps-1)
+        step_size = self.step_size
 
-        for i in range(self.N_steps-1):
+        for i in range(array_len-1):
             U1 = U(r_array[i], u_array[i], v_array[i], E_guess)
             V1 = V(r_array[i], u_array[i], v_array[i], E_guess)
 
@@ -107,7 +114,6 @@ class runge_kutta:
     
             u_array[i + 1] = u_array[i] + ( step_size / 6. ) * (U1 + 2. * U2 + 2. * U3 + U4) / self.hbarc
             v_array[i + 1] = v_array[i] + ( step_size / 6. ) * (V1 + 2. * V2 + 2. * V3 + V4) / self.hbarc
-            r_array[i + 1] = r_array[i] + step_size
 
         return r_array, u_array, v_array
 
@@ -150,18 +156,19 @@ class runge_kutta:
         '''
         
         # Initialize arrays
-        r_array = np.zeros(self.N_steps)
-        u_array = np.zeros(self.N_steps)
-        v_array = np.zeros(self.N_steps)
+        r_array = self.r_array_R[::-1]      # Reversing the order so that the array goes from high r to low r
+
+        array_len = len(r_array)
+        u_array = np.zeros(array_len)
+        v_array = np.zeros(array_len)
 
         # Set initial conditions 
-        r_array[0] = self.r_max
         u_array[0] = u_initial
         v_array[0] = v_initial
 
-        step_size = (self.r_max - self.r_middle) / (self.N_steps - 1)
+        step_size = self.step_size
 
-        for i in range(self.N_steps-1):
+        for i in range(array_len-1):
             U1 = U(r_array[i], u_array[i], v_array[i], E_guess)
             V1 = V(r_array[i], u_array[i], v_array[i], E_guess)
 
@@ -176,7 +183,6 @@ class runge_kutta:
     
             u_array[i + 1] = u_array[i] - ( step_size / 6. ) * (U1 + 2. * U2 + 2. * U3 + U4) / self.hbarc
             v_array[i + 1] = v_array[i] - ( step_size / 6. ) * (V1 + 2. * V2 + 2. * V3 + V4) / self.hbarc
-            r_array[i + 1] = r_array[i] - step_size
 
         # Reverse ordering of arrays, so values go from increasing r values
         r_array = r_array[::-1]

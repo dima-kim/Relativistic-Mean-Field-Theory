@@ -124,15 +124,28 @@ def RMF_dirac_energy_solver(input_file,scalar_pot,vector_pot,rho_pot,coulomb_pot
         V = diff_eq.V_RMF()
         energy_opt = energy_optimizer(r_min,r_middle_list[index],r_max,N_steps,U,V)
 
+        print('----------------------------------------------------------------------------')
         print(state_list[index])
-        energy, r_array, u_array, v_array = energy_opt.find_energy_eigenvalue(energy_guess,diff_eq)
+        energy, r_array, u_array, v_array, iterations = energy_opt.find_energy_eigenvalue(energy_guess,diff_eq)
+
+        # I believe that I am going back enough to capture the lowest energy and my energy resolutions is fine enough.
+        # Furthermore, I have set the match radii so that they are away from nodes. If the iteration is 0
+        # it must be that the energy guess makes one of the wavefunctions 0 over a range of r-values. Thus we will continue to
+        # offset the energy guess until we get a result.
+        while iterations == 0:
+            print("########## SOLVED IN 0 ITERATIONS... LETS RE-DO WITH A SLIGHTLY LARGER ENERGY GUESS ##########")
+            energy_guess_increment = 1
+            energy_guess = energy_guess + energy_guess_increment
+            energy, r_array, u_array, v_array, iterations = energy_opt.find_energy_eigenvalue(energy_guess,diff_eq)
+
         energy_sol.append([energy,angular_mom_list[index],isospin])
         wavefunction_sol.append([r_array,u_array,v_array])
 
         # Set the next energy guess to be the solution we found.
-        # Also shift it backwards by 5 MeV so that we dont miss solutions
+        # Also shift it backwards by 3 MeV so that we dont miss solutions
         # that have energies close to one another.
-        energy_guess = energy - 6
+        energy_guess_increment = 3
+        energy_guess = energy - energy_guess_increment
 
     return np.array(energy_sol), np.array(wavefunction_sol)
     
@@ -400,7 +413,7 @@ def generate_coulomb_potential(r_array,rho_array,electron_coupling):
 
     return pot_interp
                      
-def solve_SCRMFT(input_file, tol = 1E-6):
+def solve_SCRMFT(input_file, tol = 5E-3):
     '''
     Solves the full self-consistent relativistic mean field theory.
 
@@ -424,9 +437,6 @@ def solve_SCRMFT(input_file, tol = 1E-6):
       in units of [fm^-1/2].
       
     '''
-
-    # As used in original study by Horowitz and Serot
-    tol = 0.05
     
     # Meson Parameters
     m_scalar = input_file['Sheet1']['SIGMA MASS [MEV]'][0]
@@ -453,10 +463,10 @@ def solve_SCRMFT(input_file, tol = 1E-6):
     coulomb_pot = woods_saxon_pot(coulomb_pot_strength,R0,diffuseness)
 
     # Initialize the difference to ensure while loop is true in first iteration
-    scalar_pot_diff = 100
-    vector_pot_diff = 100
-    rho_pot_diff = 100
-    coulomb_pot_diff = 100
+    scalar_pot_diff = 10
+    vector_pot_diff = 10
+    rho_pot_diff = 10
+    coulomb_pot_diff = 10
     iteration = 0
 
     while scalar_pot_diff > tol or vector_pot_diff > tol or rho_pot_diff > tol or coulomb_pot_diff > tol:
@@ -477,7 +487,6 @@ def solve_SCRMFT(input_file, tol = 1E-6):
 
         total_energy_sol = np.concatenate([p_energy_sol,n_energy_sol])
         total_wavefunction_sol = np.concatenate([p_wavefunction_sol,n_wavefunction_sol])
-
         r_array = total_wavefunction_sol[0][0]
 
         rho_b, rho_s, rho_3, rho_p = generate_densities(total_energy_sol,total_wavefunction_sol)
@@ -492,7 +501,6 @@ def solve_SCRMFT(input_file, tol = 1E-6):
         vector_pot = generate_meson_potential(r_array, rho_b, m_vector, gv)
         rho_pot = generate_meson_potential(r_array, rho_3, m_rho, grho)
         coulomb_pot = generate_coulomb_potential(r_array, rho_p, e)
-        # coulomb_pot = lambda r: 0
 
         # New potential values
         scalar_pot_after = scalar_pot(r_array)
@@ -500,10 +508,12 @@ def solve_SCRMFT(input_file, tol = 1E-6):
         rho_pot_after = rho_pot(r_array)
         coulomb_pot_after = coulomb_pot(r_array)
 
-        scalar_pot_diff = np.abs(np.max(scalar_pot_before - scalar_pot_after))
-        vector_pot_diff = np.abs(np.max(vector_pot_before - vector_pot_after))
-        rho_pot_diff = np.abs(np.max(rho_pot_before - rho_pot_after))
-        coulomb_pot_diff = np.abs(np.max(coulomb_pot_before - coulomb_pot_after))
+        # There is an extra factor of the coupling in the potentials, we have to remove it by
+        # dividing it out
+        scalar_pot_diff = np.abs( np.max( (scalar_pot_before - scalar_pot_after)/gs ) )
+        vector_pot_diff = np.abs( np.max( (vector_pot_before - vector_pot_after)/gv ) )
+        rho_pot_diff = np.abs( np.max( (rho_pot_before - rho_pot_after)/grho ) )
+        coulomb_pot_diff = np.abs( np.max( (coulomb_pot_before - coulomb_pot_after)/e ) )
 
         iteration = iteration + 1
 
