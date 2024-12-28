@@ -1,6 +1,7 @@
 from utils.differential_equation_factory import coulomb_differential_equation, RMF_differential_equation, woods_saxon_pot
 from utils.energy_optimizer import energy_optimizer
 import numpy as np
+import pandas as pd
 from scipy import integrate, interpolate
 
 def coulomb_dirac_energy_solver(input_file):
@@ -413,7 +414,7 @@ def generate_coulomb_potential(r_array,rho_array,electron_coupling):
 
     return pot_interp
                      
-def solve_SCRMFT(input_file, tol = 5E-3):
+def solve_SCRMFT(input_file, output_file_name, tol = 5E-3):
     '''
     Solves the full self-consistent relativistic mean field theory.
 
@@ -437,7 +438,7 @@ def solve_SCRMFT(input_file, tol = 5E-3):
       in units of [fm^-1/2].
       
     '''
-    
+
     # Meson Parameters
     m_scalar = input_file['Sheet1']['SIGMA MASS [MEV]'][0]
     m_vector = input_file['Sheet1']['OMEGA MASS [MEV]'][0]
@@ -524,7 +525,48 @@ def solve_SCRMFT(input_file, tol = 5E-3):
     rho_field = lambda r: rho_pot(r) / grho
     coulomb_field = lambda r: coulomb_pot(r) / e
 
-    return total_energy_sol, total_wavefunction_sol, scalar_field, vector_field, rho_field, coulomb_field
+    ### ---------- Write the wavefunctions and energies ---------- ###
+    state_list_p = input_file['Sheet3']['LABEL']
+    state_list_n = input_file['Sheet4']['LABEL']
+    kappa_list_p = input_file['Sheet3']['KAPPA']
+    kappa_list_n = input_file['Sheet4']['KAPPA']
+    with pd.ExcelWriter(output_file_name) as writer:
+        
+        # Create wavefunction dictionaries
+        d_p_wf = {'R [FM]': p_wavefunction_sol[0][0], 'U [FM^-1/2] (' + str(state_list_p[0]) + ')' :p_wavefunction_sol[0][1], 'V [FM^-1/2] (' + str(state_list_p[0]) + ')':p_wavefunction_sol[0][2]} 
+        d_n_wf = {'R [FM]': n_wavefunction_sol[0][0], 'U [FM^-1/2] (' + str(state_list_n[0]) + ')' :n_wavefunction_sol[0][1], 'V [FM^-1/2] (' + str(state_list_n[0]) + ')':n_wavefunction_sol[0][2]} 
+
+        for i in range(1,p_wavefunction_sol.shape[0]):
+            
+            d_p_wf_hold = {'U [FM^-1/2] (' + str(state_list_p[i]) + ')':p_wavefunction_sol[i][1], 'V [FM^-1/2] (' + str(state_list_p[i]) + ')':p_wavefunction_sol[i][2]}
+            d_p_wf = d_p_wf | d_p_wf_hold
+
+            d_n_wf_hold = {'U [FM^-1/2] (' + str(state_list_n[i]) + ')':n_wavefunction_sol[i][1], 'V [FM^-1/2] (' + str(state_list_n[i]) + ')':n_wavefunction_sol[i][2]}
+            d_n_wf = d_n_wf | d_n_wf_hold
+
+        # Create energy dictionaries
+        energy_p = [array[0] for array in p_energy_sol]
+        energy_n = [array[0] for array in n_energy_sol]
+        number_of_states_p = [array[1] for array in p_energy_sol]
+        number_of_states_n = [array[1] for array in n_energy_sol]
+        d_p_energy = {'LABEL': state_list_p, '2J+1': number_of_states_p, 'KAPPA' : kappa_list_p, 'ENERGY [MEV]': energy_p}
+        d_n_energy = {'LABEL': state_list_n, '2J+1': number_of_states_n, 'KAPPA' : kappa_list_n, 'ENERGY [MEV]': energy_n}
+        
+        # Create wavefunction and emergy data frames
+        df_p_wf = pd.DataFrame(d_p_wf)
+        df_p_energy = pd.DataFrame(d_p_energy)
+        
+        df_n_wf = pd.DataFrame(d_n_wf)
+        df_n_energy = pd.DataFrame(d_n_energy)
+
+        # Write the DataFrame to a sheet named after the nucleon
+        df_p_wf.to_excel(writer, sheet_name='PROTON', index = False)
+        df_p_energy.to_excel(writer, sheet_name='PROTON ENERGY', index = False)
+
+        df_n_wf.to_excel(writer, sheet_name='NEUTRON', index = False)
+        df_n_energy.to_excel(writer, sheet_name='NEUTRON ENERGY', index = False)
+
+    return p_energy_sol, p_wavefunction_sol, n_energy_sol, n_wavefunction_sol, scalar_field, vector_field, rho_field, coulomb_field
 
 def solve_woods_saxon_RMFT(input_file):
     '''
